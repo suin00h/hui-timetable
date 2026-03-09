@@ -188,6 +188,30 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
 
 .modal-btns{display:flex;gap:7px;margin-top:18px;}
 .modal-btns .btn{flex:1;text-align:center;}
+
+/* ── AUTH ── */
+.lock-btn{background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);font-size:.82rem;padding:5px 10px;cursor:pointer;transition:all .15s;font-family:'Noto Sans KR',sans-serif;}
+.lock-btn:hover{border-color:var(--accent);color:var(--accent);}
+.lock-btn.unlocked{border-color:#16a34a55;color:#16a34a;}
+.auth-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(6px);z-index:500;display:flex;align-items:center;justify-content:center;}
+.auth-overlay.hidden{display:none;}
+.auth-box{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:32px 28px;width:320px;box-shadow:0 16px 48px rgba(0,0,0,.6);animation:popIn .18s ease;}
+.auth-box h3{font-size:1rem;font-weight:700;margin-bottom:6px;}
+.auth-box p{font-size:.74rem;color:var(--muted);margin-bottom:20px;line-height:1.5;}
+.auth-box input{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:.9rem;padding:10px 12px;outline:none;transition:border-color .15s;font-family:'Noto Sans KR',sans-serif;box-sizing:border-box;}
+.auth-box input:focus{border-color:var(--accent);}
+.auth-box input.error{border-color:#e05c5c;animation:shake .25s ease;}
+.auth-btns{display:flex;gap:8px;margin-top:14px;}
+.auth-btns .btn{flex:1;text-align:center;}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+/* read-only mode: hide edit controls */
+body.locked .btn-edit-only{display:none!important;}
+body.locked .tt-block .b-del{display:none!important;}
+body.locked .tt-block .b-plus{display:none!important;}
+body.locked .click-layer{pointer-events:none!important;}
+body.locked .tt-time-cell{pointer-events:none!important;cursor:default!important;}
+body.locked .title-input{pointer-events:none!important;}
+body.locked .manage-panel{display:none!important;}
 </style>
 </head>
 <body>
@@ -197,8 +221,22 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
   <div class="controls">
     <span id="syncStatus"></span>
     <button class="btn" id="themeBtn" onclick="toggleTheme()">☀ 라이트</button>
-    <button class="btn" onclick="toggleManage()">⚙ 설정</button>
-    <button class="btn" onclick="openRosterManager()">👥 수강생 관리</button>
+    <button id="lockBtn" class="lock-btn" onclick="handleLockClick()">🔒</button>
+    <button class="btn btn-edit-only" onclick="toggleManage()">⚙ 설정</button>
+    <button class="btn btn-edit-only" onclick="openRosterManager()">👥 수강생 관리</button>
+  </div>
+</div>
+
+<!-- AUTH OVERLAY -->
+<div class="auth-overlay hidden" id="authOverlay">
+  <div class="auth-box">
+    <h3 id="authTitle">🔓 수정 모드 잠금 해제</h3>
+    <p id="authDesc">비밀번호를 입력하면 수정 권한이 활성화됩니다.<br>탭을 닫으면 자동으로 잠금됩니다.</p>
+    <input type="password" id="authInput" placeholder="비밀번호" onkeydown="if(event.key==='Enter')submitAuth()">
+    <div class="auth-btns">
+      <button class="btn" type="button" onclick="closeAuthOverlay()">취소</button>
+      <button class="btn primary" type="button" onclick="submitAuth()">확인</button>
+    </div>
   </div>
 </div>
 
@@ -218,6 +256,18 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
   <div class="cfg-item">
     <label>고정 일정</label>
     <button class="btn" type="button" onclick="openFixedEventMgr()" style="font-size:.72rem;padding:5px 10px;">📌 관리</button>
+  </div>
+  <div class="cfg-item" style="border-top:1px solid var(--border);padding-top:12px;margin-top:4px;">
+    <label>비밀번호 변경</label>
+    <div style="display:flex;flex-direction:column;gap:6px;">
+      <input type="password" id="cfgPwCurrent" placeholder="현재 비밀번호" style="font-size:.78rem;padding:6px 10px;">
+      <input type="password" id="cfgPwNew" placeholder="새 비밀번호" style="font-size:.78rem;padding:6px 10px;">
+      <input type="password" id="cfgPwConfirm" placeholder="새 비밀번호 확인" style="font-size:.78rem;padding:6px 10px;">
+      <div style="display:flex;gap:6px;align-items:center;">
+        <button class="btn primary" type="button" onclick="changePassword()" style="font-size:.72rem;padding:5px 12px;">변경</button>
+        <span id="cfgPwMsg" style="font-size:.7rem;color:var(--muted);"></span>
+      </div>
+    </div>
   </div>
   <p class="tip">💡 빈 칸 클릭 → 수업 추가 &nbsp;|&nbsp; 왼쪽 교시 라벨 클릭 → 요일 선택 추가 &nbsp;|&nbsp; 블록 클릭 → 편집<br>🎨 색상 팔레트: 색상 선택 시 <strong>우클릭</strong>으로 팔레트 색상 편집 가능</p>
 </div>
@@ -644,7 +694,7 @@ function render(){
         ${durationMins>=S.interval?`<div class="b-time">${timeStr}</div>`:''}
         <span class="b-del" onclick="removeFixedEvent('${fe.id}',event)">✕</span>
       `;
-      fel.onclick=e=>{if(!e.target.classList.contains('b-del'))openFixedEventMgr();};
+      fel.onclick=e=>{if(!e.target.classList.contains('b-del')&&isUnlocked())openFixedEventMgr();};
       wrap.appendChild(fel);
     });
 
@@ -757,6 +807,7 @@ function closeRoster(){document.getElementById('rosterPopup').classList.remove('
 
 // ── modal helpers ─────────────────────────────────────────────────
 function openAdd(day,period,e){
+  if(!isUnlocked())return;
   if(e)e.stopPropagation();
   mCtx={mode:'add',day,period};mSpan=1;mDay=null;
   mColor=COLORS[Math.floor(Math.random()*8)];mStudents=[];
@@ -769,6 +820,7 @@ function openAdd(day,period,e){
   setTimeout(()=>document.getElementById('fName').focus(),40);
 }
 function openAddFromTime(period){
+  if(!isUnlocked())return;
   mCtx={mode:'add',day:null,period};mSpan=1;mDay=S.days[0];
   mColor=COLORS[Math.floor(Math.random()*8)];mStudents=[];
   document.getElementById('modalTitle').textContent=`${period}교시 수업 추가`;
@@ -780,6 +832,7 @@ function openAddFromTime(period){
   setTimeout(()=>document.getElementById('fName').focus(),40);
 }
 function openEdit(id){
+  if(!isUnlocked())return;
   const b=S.blocks.find(x=>x.id===id);if(!b)return;
   mCtx={mode:'edit',id};mSpan=b.span;mColor=b.color;mDay=null;
   mStudents=[...(b.students||[])];
@@ -811,6 +864,7 @@ function deleteBlock(){
   S.blocks=S.blocks.filter(x=>x.id!==mCtx.id);closeModal();render();
 }
 function removeBlock(id,e){
+  if(!isUnlocked())return;
   e.stopPropagation();S.blocks=S.blocks.filter(x=>x.id!==id);render();
 }
 
@@ -855,6 +909,7 @@ let rosterColor=COLORS[4]; // default orange-ish
 let rosterInternExpanded=new Set(); // track which intern rows are expanded
 
 function openRosterManager(){
+  if(!isUnlocked())return;
   resetRosterForm();
   buildRosterMgrList();
   buildInternDayPicker();
@@ -1127,6 +1182,7 @@ let fixedColor=COLORS[0];
 let fixedEditId=null; // null = add mode, string = edit mode
 
 function openFixedEventMgr(){
+  if(!isUnlocked())return;
   if(!S.fixedEvents)S.fixedEvents=[];
   resetFixedForm();
   buildFixedEventList();
@@ -1266,9 +1322,108 @@ function deleteFixedEvent(){
 }
 
 function removeFixedEvent(id,e){
+  if(!isUnlocked())return;
   if(e)e.stopPropagation();
   S.fixedEvents=(S.fixedEvents||[]).filter(fe=>fe.id!==id);
   buildFixedEventList();render();
+}
+
+// ── auth ──────────────────────────────────────────────────────────
+const PW_HASH='6196735bccfab99b6ce6eaf4e375160b39926de2fcfcf1121c97a29ae3166fca'; // default: lab2026!
+// To change password: open browser console and run setPwHash('newpassword')
+
+async function sha256(str){
+  const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+function getStoredHash(){
+  // Priority: S.pwHash (cloud-saved) > sessionStorage override > hardcoded default
+  if(S.pwHash)return S.pwHash;
+  try{return sessionStorage.getItem('tt_pw_hash')||PW_HASH;}catch(e){return PW_HASH;}
+}
+
+function isUnlocked(){
+  try{return sessionStorage.getItem('tt_auth')==='1';}catch(e){return false;}
+}
+
+function applyLockState(){
+  const unlocked=isUnlocked();
+  document.body.classList.toggle('locked',!unlocked);
+  const btn=document.getElementById('lockBtn');
+  if(btn){btn.textContent=unlocked?'🔓':'🔒';btn.classList.toggle('unlocked',unlocked);}
+}
+
+function handleLockClick(){
+  if(isUnlocked()){
+    // lock
+    try{sessionStorage.removeItem('tt_auth');}catch(e){}
+    applyLockState();
+  } else {
+    openAuthOverlay();
+  }
+}
+
+function openAuthOverlay(){
+  document.getElementById('authOverlay').classList.remove('hidden');
+  setTimeout(()=>document.getElementById('authInput').focus(),40);
+}
+function closeAuthOverlay(){
+  document.getElementById('authOverlay').classList.add('hidden');
+  document.getElementById('authInput').value='';
+  document.getElementById('authInput').classList.remove('error');
+}
+
+async function submitAuth(){
+  const val=document.getElementById('authInput').value;
+  const hash=await sha256(val);
+  const stored=getStoredHash();
+  if(hash===stored){
+    try{sessionStorage.setItem('tt_auth','1');}catch(e){}
+    closeAuthOverlay();
+    applyLockState();
+  } else {
+    const inp=document.getElementById('authInput');
+    inp.classList.add('error');
+    inp.value='';
+    setTimeout(()=>inp.classList.remove('error'),400);
+    inp.focus();
+  }
+}
+
+// console helper to change password
+window.setPwHash=async function(newPw){
+  const h=await sha256(newPw);
+  try{sessionStorage.setItem('tt_pw_hash',h);}catch(e){}
+  console.log('새 비밀번호 해시:', h);
+  console.log('이 값을 코드의 PW_HASH 상수에 붙여넣으면 영구 변경됩니다.');
+};
+
+async function changePassword(){
+  const cur=document.getElementById('cfgPwCurrent').value;
+  const nw=document.getElementById('cfgPwNew').value;
+  const cf=document.getElementById('cfgPwConfirm').value;
+  const msg=document.getElementById('cfgPwMsg');
+  const setMsg=(t,ok)=>{msg.textContent=t;msg.style.color=ok?'#16a34a':'#e05c5c';setTimeout(()=>msg.textContent='',3000);};
+
+  if(!cur||!nw||!cf){setMsg('모든 칸을 입력해주세요.');return;}
+  if(nw!==cf){setMsg('새 비밀번호가 일치하지 않아요.');return;}
+  if(nw.length<4){setMsg('4자 이상으로 설정해주세요.');return;}
+
+  const curHash=await sha256(cur);
+  const stored=getStoredHash();
+  if(curHash!==stored){setMsg('현재 비밀번호가 틀렸어요.');return;}
+
+  const newHash=await sha256(nw);
+  // Save to S so it persists via JSONBin
+  S.pwHash=newHash;
+  scheduleSave();
+  // Also update session
+  try{sessionStorage.setItem('tt_pw_hash',newHash);}catch(e){}
+  document.getElementById('cfgPwCurrent').value='';
+  document.getElementById('cfgPwNew').value='';
+  document.getElementById('cfgPwConfirm').value='';
+  setMsg('✓ 비밀번호가 변경됐어요.',true);
 }
 
 // ── theme ─────────────────────────────────────────────────────────
@@ -1297,13 +1452,15 @@ document.addEventListener('click',e=>{
   const p=document.getElementById('rosterPopup');
   if(p.classList.contains('open')&&!p.contains(e.target))closeRoster();
 });
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal();closeRoster();closeRosterMgr();closeFixedMgr();}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal();closeRoster();closeRosterMgr();closeFixedMgr();closeAuthOverlay();}});
 
 // ── init ─────────────────────────────────────────────────────────
 buildDayToggles();
+applyLockState();
 loadFromCloud().then(()=>{
   buildDayToggles();
   document.getElementById('cfgSubLines').checked=!!S.subLines;
+  applyLockState();
   _render();
 });
 setInterval(updateNowLine,30000);
