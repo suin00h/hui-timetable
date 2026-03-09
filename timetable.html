@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="X-Frame-Options" content="ALLOWALL">
+<title>시간표</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#0f0f11; --surface:#1a1a1f; --border:#2a2a32;
+  --text:#e8e8f0; --muted:#55556a;
+  --accent:#5b6af0; --accent-dim:rgba(91,106,240,.12);
+  --delete:#e05c5c; --now:#ff4d4d;
+  --time-w:72px; --r:8px;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding:28px 20px 48px;}
+
+/* ── HEADER ── */
+.header{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px;}
+.title-input{font-size:1.6rem;font-weight:700;background:transparent;border:none;border-bottom:2px solid transparent;color:var(--text);font-family:'Noto Sans KR',sans-serif;outline:none;transition:border-color .15s;}
+.title-input:focus{border-bottom-color:var(--accent);}
+.controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+.btn{padding:7px 13px;border-radius:var(--r);border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:.76rem;font-family:'Noto Sans KR',sans-serif;cursor:pointer;transition:all .15s;white-space:nowrap;}
+.btn:hover{border-color:var(--accent);color:var(--accent);}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;}
+.btn.primary:hover{opacity:.85;color:#fff;}
+.btn.danger{border-color:var(--delete);color:var(--delete);}
+#syncStatus{font-size:.7rem;color:var(--muted);min-width:70px;text-align:right;}
+
+/* ── SETTINGS ── */
+.manage-panel{display:none;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:16px 20px;margin-bottom:16px;}
+.manage-panel.open{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start;}
+.manage-panel h4{width:100%;font-size:.78rem;color:var(--muted);}
+.cfg-item{display:flex;flex-direction:column;gap:4px;}
+.cfg-item label{font-size:.68rem;color:var(--muted);}
+.cfg-item input{background:var(--bg);border:1px solid var(--border);border-radius:5px;color:var(--text);font-family:'DM Mono',monospace;font-size:.8rem;padding:5px 8px;outline:none;width:90px;}
+.cfg-item input:focus{border-color:var(--accent);}
+.day-toggles{display:flex;gap:5px;flex-wrap:wrap;}
+.day-tag{padding:4px 10px;border-radius:20px;border:1px solid var(--border);font-size:.72rem;cursor:pointer;background:var(--bg);transition:all .12s;}
+.day-tag.on{background:var(--accent);border-color:var(--accent);color:#fff;}
+.tip{font-size:.64rem;color:var(--muted);line-height:1.7;width:100%;}
+
+/* ── TIMETABLE ── */
+.tt-wrap{overflow-x:auto;}
+.tt-outer{display:flex;min-width:400px;border:1px solid var(--border);border-radius:10px;overflow:hidden;}
+.tt-times{flex-shrink:0;width:var(--time-w);background:var(--surface);border-right:1px solid var(--border);}
+.tt-times .corner{height:40px;border-bottom:1px solid var(--border);}
+.tt-time-cell{display:flex;flex-direction:column;align-items:center;justify-content:center;border-bottom:1px solid var(--border);padding:4px;cursor:pointer;transition:background .12s;position:relative;}
+.tt-time-cell:hover{background:var(--accent-dim);}
+.tt-time-cell .p-num{font-size:.56rem;color:var(--muted);opacity:.55;}
+.tt-time-cell .p-time{font-family:'DM Mono',monospace;font-size:.68rem;color:var(--muted);}
+.tt-time-cell .p-hint{font-size:.68rem;font-weight:700;color:var(--accent);opacity:0;transition:opacity .12s;margin-top:2px;}
+.tt-time-cell:hover .p-hint{opacity:1;}
+.tt-days{display:flex;flex:1;}
+.tt-day{flex:1;display:flex;flex-direction:column;border-right:1px solid var(--border);min-width:80px;}
+.tt-day:last-child{border-right:none;}
+.tt-day-header{height:40px;display:flex;align-items:center;justify-content:center;font-size:.78rem;font-weight:500;color:var(--muted);letter-spacing:.05em;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0;}
+.tt-day-header.today{color:var(--accent);font-weight:700;}
+.click-layer{position:absolute;inset:0;cursor:pointer;transition:background .1s;z-index:1;}
+.click-layer:hover{background:var(--accent-dim);}
+
+/* ── BLOCK ── */
+.tt-block{border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:5px 7px;cursor:pointer;pointer-events:all;transition:filter .15s,box-shadow .15s;text-align:center;overflow:hidden;position:absolute;z-index:2;}
+.tt-block:hover{filter:brightness(1.14);box-shadow:0 4px 14px rgba(0,0,0,.4);}
+.tt-block .b-name{font-size:.74rem;font-weight:700;line-height:1.2;}
+.tt-block .b-sub{font-size:.6rem;opacity:.7;margin-top:2px;}
+.tt-block .b-time{font-size:.56rem;opacity:.5;margin-top:2px;font-family:'DM Mono',monospace;}
+.tt-block .b-del{position:absolute;top:3px;right:4px;font-size:.6rem;opacity:0;cursor:pointer;color:rgba(255,255,255,.85);transition:opacity .12s;z-index:3;}
+.tt-block .b-plus{position:absolute;bottom:3px;right:4px;font-size:.72rem;font-weight:700;opacity:0;cursor:pointer;color:rgba(255,255,255,.9);transition:opacity .12s;z-index:3;background:rgba(255,255,255,.18);border-radius:4px;padding:0px 5px;}
+.tt-block:hover .b-del,.tt-block:hover .b-plus{opacity:1;}
+.tt-block .b-plus:hover{background:rgba(255,255,255,.32);}
+.b-avs{display:flex;flex-wrap:wrap;justify-content:center;gap:2px;margin-top:3px;max-width:100%;}
+.b-av{width:16px;height:16px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.46rem;font-weight:700;background:rgba(255,255,255,.2);color:rgba(255,255,255,.9);flex-shrink:0;cursor:pointer;}
+
+/* ── NOW LINE ── */
+.now-line{position:absolute;left:0;right:0;height:2px;background:var(--now);z-index:10;pointer-events:none;}
+.now-line::before{content:'';position:absolute;left:-4px;top:-4px;width:10px;height:10px;border-radius:50%;background:var(--now);}
+
+/* ── ROSTER POPUP ── */
+.roster-popup{display:none;position:fixed;z-index:200;background:#1c1c24;border:1px solid var(--border);border-radius:12px;padding:16px;min-width:220px;box-shadow:0 8px 32px rgba(0,0,0,.6);animation:popIn .15s ease;}
+.roster-popup.open{display:block;}
+.roster-popup h4{font-size:.82rem;font-weight:600;margin-bottom:10px;}
+.roster-list{list-style:none;}
+.roster-list li{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border);font-size:.8rem;}
+.roster-list li:last-child{border-bottom:none;}
+.roster-av{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:700;flex-shrink:0;}
+.roster-close{display:block;margin-top:10px;width:100%;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--muted);font-size:.72rem;cursor:pointer;font-family:'Noto Sans KR',sans-serif;}
+.roster-close:hover{border-color:var(--accent);color:var(--accent);}
+
+/* ── STUDENT STATUS PANEL ── */
+.status-panel{margin-top:20px;}
+.status-panel h3{font-size:.82rem;font-weight:600;color:var(--muted);margin-bottom:12px;letter-spacing:.04em;}
+.student-cards{display:flex;flex-wrap:wrap;gap:8px;}
+.s-card{
+  display:flex;align-items:center;gap:8px;
+  padding:8px 12px;border-radius:10px;
+  border:1px solid var(--border);background:var(--surface);
+  transition:all .2s; min-width:130px;
+}
+.s-card.in-class{
+  border-color:var(--accent);
+  background:var(--accent-dim);
+}
+.s-card .s-av{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.68rem;font-weight:700;flex-shrink:0;}
+.s-card .s-info{display:flex;flex-direction:column;gap:1px;}
+.s-card .s-name{font-size:.78rem;font-weight:600;}
+.s-card .s-class{font-size:.62rem;color:var(--muted);line-height:1.3;}
+.s-card.in-class .s-class{color:var(--accent);}
+.no-students{font-size:.75rem;color:var(--muted);}
+
+/* ── MODAL ── */
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:100;align-items:center;justify-content:center;backdrop-filter:blur(4px);}
+.modal-bg.open{display:flex;}
+.modal{background:#1c1c24;border:1px solid var(--border);border-radius:14px;padding:26px;width:400px;max-width:94vw;animation:popIn .18s ease;max-height:90vh;overflow-y:auto;}
+@keyframes popIn{from{transform:scale(.93);opacity:0;}to{transform:scale(1);opacity:1;}}
+.modal h3{font-size:.95rem;font-weight:600;margin-bottom:16px;}
+.form-row{margin-bottom:13px;}
+.form-row label{display:block;font-size:.7rem;color:var(--muted);margin-bottom:4px;}
+.form-row input{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:'Noto Sans KR',sans-serif;font-size:.84rem;padding:8px 10px;outline:none;transition:border-color .15s;}
+.form-row input:focus{border-color:var(--accent);}
+.span-btns{display:flex;gap:5px;flex-wrap:wrap;}
+.span-btn{flex:1;min-width:58px;padding:7px 4px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--muted);font-size:.68rem;font-family:'DM Mono',monospace;cursor:pointer;transition:all .12s;text-align:center;line-height:1.5;}
+.span-btn:hover{border-color:var(--accent);color:var(--accent);}
+.span-btn.on{background:var(--accent);border-color:var(--accent);color:#fff;}
+.color-grid{display:grid;grid-template-columns:repeat(8,26px);gap:5px;}
+.color-swatch{width:26px;height:26px;border-radius:5px;cursor:pointer;border:2px solid transparent;transition:transform .12s,border-color .12s;}
+.color-swatch:hover{transform:scale(1.14);}
+.color-swatch.on{border-color:#fff;}
+
+/* Student picker in modal */
+.student-section{display:flex;flex-direction:column;gap:8px;}
+/* Add new student row */
+.new-student-row{display:flex;gap:6px;}
+.new-student-row input{flex:1;}
+.new-student-row .btn{flex-shrink:0;padding:0 12px;}
+/* Existing student checklist */
+.student-checklist{display:flex;flex-wrap:wrap;gap:5px;max-height:120px;overflow-y:auto;padding:2px;}
+.sc-item{display:flex;align-items:center;gap:5px;padding:4px 9px 4px 6px;border-radius:20px;border:1px solid var(--border);background:var(--bg);cursor:pointer;transition:all .12s;font-size:.74rem;user-select:none;}
+.sc-item:hover{border-color:var(--accent);}
+.sc-item.checked{background:var(--accent-dim);border-color:var(--accent);color:var(--accent);}
+.sc-item .sc-av{width:16px;height:16px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.46rem;font-weight:700;flex-shrink:0;}
+.sc-item .sc-check{font-size:.6rem;opacity:0;transition:opacity .12s;}
+.sc-item.checked .sc-check{opacity:1;}
+.no-roster-hint{font-size:.7rem;color:var(--muted);}
+
+.modal-btns{display:flex;gap:7px;margin-top:18px;}
+.modal-btns .btn{flex:1;text-align:center;}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <input class="title-input" id="titleInput" value="26-1 시간표" size="12">
+  <div class="controls">
+    <span id="syncStatus"></span>
+    <button class="btn" onclick="toggleManage()">⚙ 설정</button>
+    <button class="btn" onclick="openRosterManager()">👥 수강생 관리</button>
+    <button class="btn primary" onclick="exportData()">📋 내보내기</button>
+    <button class="btn" onclick="importPrompt()">📥 불러오기</button>
+  </div>
+</div>
+
+<div class="manage-panel" id="managePanel">
+  <h4>시간표 설정</h4>
+  <div class="cfg-item"><label>시작 시간</label><input type="time" id="cfgStart" value="09:00" onchange="render()"></div>
+  <div class="cfg-item"><label>교시 간격 (분)</label><input type="number" id="cfgInterval" value="90" min="30" max="240" style="width:70px" onchange="render()"></div>
+  <div class="cfg-item"><label>교시 수</label><input type="number" id="cfgPeriods" value="6" min="1" max="16" style="width:60px" onchange="render()"></div>
+  <div class="cfg-item"><label>요일</label><div class="day-toggles" id="dayToggles"></div></div>
+  <p class="tip">💡 빈 칸 클릭 → 수업 추가 &nbsp;|&nbsp; 왼쪽 교시 라벨 클릭 → 요일 선택 추가 &nbsp;|&nbsp; 블록 클릭 → 편집</p>
+</div>
+
+<div class="tt-wrap"><div class="tt-outer" id="ttOuter"></div></div>
+
+<!-- STUDENT STATUS PANEL -->
+<div class="status-panel">
+  <h3>수강생 현황</h3>
+  <div class="student-cards" id="studentCards"></div>
+</div>
+
+<!-- ROSTER POPUP (block detail) -->
+<div class="roster-popup" id="rosterPopup">
+  <h4 id="rosterTitle">수강생</h4>
+  <ul class="roster-list" id="rosterList"></ul>
+  <button class="roster-close" onclick="closeRoster()">닫기</button>
+</div>
+
+<!-- BLOCK MODAL -->
+<div class="modal-bg" id="modalBg">
+  <div class="modal">
+    <h3 id="modalTitle">수업 추가</h3>
+    <div class="form-row" id="dayPickerRow" style="display:none">
+      <label>요일</label>
+      <div class="day-toggles" id="modalDayPicker"></div>
+    </div>
+    <div class="form-row"><label>수업명</label><input type="text" id="fName" placeholder="예: 수학"></div>
+    <div class="form-row"><label>담당 / 메모 (선택)</label><input type="text" id="fSub" placeholder="예: 김선생님"></div>
+    <div class="form-row"><label>교시 범위</label><div class="span-btns" id="spanBtns"></div></div>
+    <div class="form-row">
+      <label>수강생 배정</label>
+      <div class="student-section">
+        <div class="student-checklist" id="studentChecklist"></div>
+        <div class="new-student-row">
+          <input type="text" id="fNewStudent" placeholder="새 수강생 이름">
+          <button class="btn" type="button" onclick="addNewStudent()">+ 추가</button>
+        </div>
+      </div>
+    </div>
+    <div class="form-row"><label>색상</label><div class="color-grid" id="colorGrid"></div></div>
+    <div class="modal-btns">
+      <button class="btn danger" id="delBtn" type="button" onclick="deleteBlock()" style="display:none">삭제</button>
+      <button class="btn" type="button" onclick="closeModal()">취소</button>
+      <button class="btn primary" type="button" onclick="saveBlock()">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- ROSTER MANAGER MODAL -->
+<div class="modal-bg" id="rosterMgrBg">
+  <div class="modal">
+    <h3>수강생 전체 관리</h3>
+    <div class="form-row">
+      <label>새 수강생 추가</label>
+      <div class="new-student-row">
+        <input type="text" id="fRosterNew" placeholder="이름 입력">
+        <button class="btn" type="button" onclick="addGlobalStudent()">+ 추가</button>
+      </div>
+    </div>
+    <div class="form-row">
+      <label>전체 수강생</label>
+      <div class="student-checklist" id="rosterMgrList" style="max-height:200px;"></div>
+    </div>
+    <div class="modal-btns">
+      <button class="btn primary" type="button" onclick="closeRosterMgr()">닫기</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const DAYS_ALL=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+const COLORS=['#5b6af0','#7c3aed','#db2777','#e05c5c','#ea7a2c','#d4a017','#16a34a','#0891b2','#0d7490','#6b7280','#a16207','#7f5539','#b5179e','#3a86ff','#48cae4','#80b918'];
+const AV_COLORS=['#5b6af0','#16a34a','#db2777','#ea7a2c','#0891b2','#7c3aed','#d4a017','#e05c5c'];
+
+let S={
+  title:'26-1 시간표', startTime:'09:00', interval:90, periods:6,
+  days:['Mon','Tue','Wed','Thu','Fri'],
+  blocks:[], // {id,day,period,span,name,sub,color,students:[]}
+  roster:[], // global student list
+};
+
+let mCtx=null, mDay=null, mColor=COLORS[0], mSpan=1, mStudents=[];
+const ROW_H=64;
+
+// ── helpers ──────────────────────────────────────────────────────
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,5);}
+function addMins(t,m){const[h,mm]=t.split(':').map(Number),tot=h*60+mm+m;return`${String(Math.floor(tot/60)).padStart(2,'0')}:${String(tot%60).padStart(2,'0')}`;}
+function pStart(p){return addMins(S.startTime,(p-1)*S.interval);}
+function pEnd(p){return addMins(S.startTime,p*S.interval);}
+function syncState(){
+  S.startTime=document.getElementById('cfgStart').value;
+  S.interval=Math.max(30,parseInt(document.getElementById('cfgInterval').value)||90);
+  S.periods=Math.max(1,parseInt(document.getElementById('cfgPeriods').value)||6);
+}
+function initials(n){return n.trim().slice(0,2).toUpperCase();}
+function avColor(n){let h=0;for(let c of n)h=(h+c.charCodeAt(0))%AV_COLORS.length;return AV_COLORS[h];}
+
+// ── current class detection ───────────────────────────────────────
+function getCurrentBlocks(){
+  const now=new Date();
+  const todayName=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][now.getDay()];
+  const [sh,sm]=S.startTime.split(':').map(Number);
+  const nowMins=now.getHours()*60+now.getMinutes();
+  return S.blocks.filter(b=>{
+    if(b.day!==todayName)return false;
+    const startMins=sh*60+sm+(b.period-1)*S.interval;
+    const endMins=startMins+b.span*S.interval;
+    return nowMins>=startMins&&nowMins<endMins;
+  });
+}
+
+// ── day toggles ──────────────────────────────────────────────────
+function buildDayToggles(){
+  const el=document.getElementById('dayToggles');el.innerHTML='';
+  DAYS_ALL.forEach(d=>{
+    const t=document.createElement('div');
+    t.className='day-tag'+(S.days.includes(d)?' on':'');
+    t.textContent=d;
+    t.onclick=()=>{
+      if(S.days.includes(d)){if(S.days.length===1)return;S.days=S.days.filter(x=>x!==d);}
+      else S.days=DAYS_ALL.filter(x=>S.days.includes(x)||x===d);
+      buildDayToggles();render();
+    };
+    el.appendChild(t);
+  });
+}
+
+// ── lane assignment ───────────────────────────────────────────────
+function assignLanes(blocks){
+  const sorted=[...blocks].sort((a,b)=>a.period-b.period);
+  const result={},laneEnds=[];
+  sorted.forEach(b=>{
+    const bEnd=b.period+b.span-1;let chosen=-1;
+    for(let i=0;i<laneEnds.length;i++){if(laneEnds[i]<b.period){chosen=i;break;}}
+    if(chosen===-1){chosen=laneEnds.length;laneEnds.push(0);}
+    laneEnds[chosen]=bEnd;result[b.id]={lane:chosen,totalLanes:0};
+  });
+  sorted.forEach(b=>{
+    const bEnd=b.period+b.span-1;let maxL=result[b.id].lane;
+    sorted.forEach(o=>{
+      if(o.id===b.id)return;const oEnd=o.period+o.span-1;
+      if(o.period<=bEnd&&oEnd>=b.period)maxL=Math.max(maxL,result[o.id].lane);
+    });
+    result[b.id].totalLanes=maxL+1;
+  });
+  return result;
+}
+
+// ── now-line ─────────────────────────────────────────────────────
+function getNowOffsetPx(){
+  const now=new Date();
+  const[sh,sm]=S.startTime.split(':').map(Number);
+  const startMins=sh*60+sm,nowMins=now.getHours()*60+now.getMinutes();
+  const diff=nowMins-startMins;
+  if(diff<0||diff>S.periods*S.interval)return null;
+  return(diff/S.interval)*ROW_H;
+}
+function updateNowLine(){
+  const px=getNowOffsetPx();
+  document.querySelectorAll('.now-line').forEach(el=>{
+    el.style.display=px===null?'none':'block';
+    if(px!==null)el.style.top=px+'px';
+  });
+  renderStatusPanel();
+}
+
+// ── render ───────────────────────────────────────────────────────
+function render(){
+  syncState();
+  const outer=document.getElementById('ttOuter');
+  outer.innerHTML='';
+  const todayName=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date().getDay()];
+
+  // Time column
+  const timesCol=document.createElement('div');
+  timesCol.className='tt-times';
+  timesCol.appendChild(Object.assign(document.createElement('div'),{className:'corner'}));
+  for(let p=1;p<=S.periods;p++){
+    const tc=document.createElement('div');
+    tc.className='tt-time-cell';tc.style.height=ROW_H+'px';tc.title=`${p}교시 기준 수업 추가`;
+    tc.innerHTML=`<span class="p-num">${p}교시</span><span class="p-time">${pStart(p)}</span><span class="p-hint">+</span>`;
+    tc.onclick=()=>openAddFromTime(p);timesCol.appendChild(tc);
+  }
+  outer.appendChild(timesCol);
+
+  // Day columns
+  const daysWrap=document.createElement('div');daysWrap.className='tt-days';
+  S.days.forEach(day=>{
+    const dayCol=document.createElement('div');dayCol.className='tt-day';
+    const hdr=document.createElement('div');
+    hdr.className='tt-day-header'+(day===todayName?' today':'');
+    hdr.textContent=day;dayCol.appendChild(hdr);
+
+    const dayBlocks=S.blocks.filter(b=>b.day===day);
+    const lanes=assignLanes(dayBlocks);
+    const swallowed=new Set();
+    dayBlocks.forEach(b=>{for(let i=1;i<b.span;i++)swallowed.add(b.period+i);});
+
+    const wrap=document.createElement('div');
+    wrap.style.cssText=`position:relative;flex:1;height:${S.periods*ROW_H}px;`;
+
+    // Grid lines
+    for(let p=1;p<=S.periods;p++){
+      const l=document.createElement('div');
+      l.style.cssText=`position:absolute;left:0;right:0;top:${p*ROW_H}px;height:1px;background:var(--border);pointer-events:none;`;
+      wrap.appendChild(l);
+    }
+    // Click zones
+    for(let p=1;p<=S.periods;p++){
+      if(!swallowed.has(p)&&!dayBlocks.some(b=>b.period===p)){
+        const cz=document.createElement('div');
+        cz.className='click-layer';cz.style.cssText=`top:${(p-1)*ROW_H}px;height:${ROW_H}px;`;
+        cz.onclick=()=>openAdd(day,p);wrap.appendChild(cz);
+      }
+    }
+
+    // Blocks
+    dayBlocks.forEach(b=>{
+      const{lane,totalLanes}=lanes[b.id];
+      const GAP=3,actualSpan=Math.min(b.span,S.periods-b.period+1);
+      const colW=100/totalLanes;
+      const bEl=document.createElement('div');bEl.className='tt-block';
+      bEl.style.cssText=`top:${(b.period-1)*ROW_H+GAP}px;height:${actualSpan*ROW_H-GAP*2}px;left:calc(${lane*colW}% + ${GAP}px);width:calc(${colW}% - ${GAP*2}px);background:${b.color}1e;border:1.5px solid ${b.color};color:${b.color};`;
+
+      const students=b.students||[];
+      const showTime=actualSpan>1;
+
+      // Adaptive avatar count based on block width
+      // totalLanes tells how many side-by-side — more lanes = narrower block
+      const maxAv=totalLanes>=3?1:totalLanes===2?2:4;
+      const shown=students.slice(0,maxAv);
+      const extra=students.length-shown.length;
+      let avsHtml='';
+      if(students.length>0){
+        avsHtml='<div class="b-avs">';
+        shown.forEach(s=>{avsHtml+=`<div class="b-av" style="background:${avColor(s)}" onclick="showRoster('${b.id}',event)" title="${s}">${initials(s)}</div>`;});
+        if(extra>0)avsHtml+=`<div class="b-av" style="background:rgba(255,255,255,.15);font-size:.5rem">+${extra}</div>`;
+        avsHtml+='</div>';
+      }
+
+      bEl.innerHTML=`
+        <div class="b-name">${b.name}</div>
+        ${b.sub?`<div class="b-sub">${b.sub}</div>`:''}
+        ${showTime?`<div class="b-time">${pStart(b.period)} – ${pEnd(b.period+actualSpan-1)}</div>`:''}
+        ${avsHtml}
+        <span class="b-del" onclick="removeBlock('${b.id}',event)">✕</span>
+        <span class="b-plus" onclick="openAdd('${day}',${b.period},event)">+</span>
+      `;
+      bEl.onclick=e=>{
+        const cl=e.target.classList;
+        if(!cl.contains('b-del')&&!cl.contains('b-plus')&&!cl.contains('b-av'))openEdit(b.id);
+      };
+      wrap.appendChild(bEl);
+    });
+
+    // Now line (today only)
+    if(day===todayName){
+      const nl=document.createElement('div');nl.className='now-line';
+      const px=getNowOffsetPx();
+      nl.style.display=px===null?'none':'block';
+      nl.style.top=(px||0)+'px';wrap.appendChild(nl);
+    }
+
+    dayCol.appendChild(wrap);daysWrap.appendChild(dayCol);
+  });
+  outer.appendChild(daysWrap);
+  renderStatusPanel();
+}
+
+// ── status panel ─────────────────────────────────────────────────
+function renderStatusPanel(){
+  const el=document.getElementById('studentCards');el.innerHTML='';
+  const allStudents=S.roster;
+  if(allStudents.length===0){
+    el.innerHTML='<span class="no-students">수강생을 등록하면 현황이 표시됩니다</span>';return;
+  }
+  const currentBlocks=getCurrentBlocks();
+  // Map student → currently attending block(s)
+  allStudents.forEach(name=>{
+    const attending=currentBlocks.filter(b=>(b.students||[]).includes(name));
+    const card=document.createElement('div');
+    card.className='s-card'+(attending.length>0?' in-class':'');
+    const classText=attending.length>0
+      ? attending.map(b=>b.name).join(', ')+'  수업 중'
+      : '수업 없음';
+    card.innerHTML=`
+      <div class="s-av" style="background:${avColor(name)};color:#fff;">${initials(name)}</div>
+      <div class="s-info">
+        <div class="s-name">${name}</div>
+        <div class="s-class">${classText}</div>
+      </div>
+    `;
+    el.appendChild(card);
+  });
+}
+
+// ── roster popup ─────────────────────────────────────────────────
+function showRoster(blockId,e){
+  e.stopPropagation();
+  const b=S.blocks.find(x=>x.id===blockId);if(!b)return;
+  const students=b.students||[];
+  document.getElementById('rosterTitle').textContent=`${b.name} 수강생 (${students.length}명)`;
+  const list=document.getElementById('rosterList');list.innerHTML='';
+  if(students.length===0){
+    list.innerHTML='<li><span style="font-size:.75rem;color:var(--muted)">없음</span></li>';
+  } else {
+    students.forEach(s=>{
+      const li=document.createElement('li');
+      li.innerHTML=`<div class="roster-av" style="background:${avColor(s)};color:#fff;">${initials(s)}</div><span>${s}</span>`;
+      list.appendChild(li);
+    });
+  }
+  const popup=document.getElementById('rosterPopup');popup.classList.add('open');
+  popup.style.left=Math.min(e.clientX+8,window.innerWidth-240)+'px';
+  popup.style.top=Math.min(e.clientY+8,window.innerHeight-200)+'px';
+}
+function closeRoster(){document.getElementById('rosterPopup').classList.remove('open');}
+
+// ── modal helpers ─────────────────────────────────────────────────
+function openAdd(day,period,e){
+  if(e)e.stopPropagation();
+  mCtx={mode:'add',day,period};mSpan=1;mDay=null;
+  mColor=COLORS[Math.floor(Math.random()*8)];mStudents=[];
+  document.getElementById('modalTitle').textContent=`${day} ${period}교시 수업 추가`;
+  document.getElementById('delBtn').style.display='none';
+  document.getElementById('dayPickerRow').style.display='none';
+  document.getElementById('fName').value='';document.getElementById('fSub').value='';
+  buildStudentChecklist();buildColorGrid();buildSpanBtns(period);
+  document.getElementById('modalBg').classList.add('open');
+  setTimeout(()=>document.getElementById('fName').focus(),40);
+}
+function openAddFromTime(period){
+  mCtx={mode:'add',day:null,period};mSpan=1;mDay=S.days[0];
+  mColor=COLORS[Math.floor(Math.random()*8)];mStudents=[];
+  document.getElementById('modalTitle').textContent=`${period}교시 수업 추가`;
+  document.getElementById('delBtn').style.display='none';
+  document.getElementById('dayPickerRow').style.display='block';
+  document.getElementById('fName').value='';document.getElementById('fSub').value='';
+  buildModalDayPicker(period);buildStudentChecklist();buildColorGrid();buildSpanBtns(period);
+  document.getElementById('modalBg').classList.add('open');
+  setTimeout(()=>document.getElementById('fName').focus(),40);
+}
+function openEdit(id){
+  const b=S.blocks.find(x=>x.id===id);if(!b)return;
+  mCtx={mode:'edit',id};mSpan=b.span;mColor=b.color;mDay=null;
+  mStudents=[...(b.students||[])];
+  document.getElementById('modalTitle').textContent='수업 편집';
+  document.getElementById('fName').value=b.name;
+  document.getElementById('fSub').value=b.sub||'';
+  document.getElementById('delBtn').style.display='block';
+  document.getElementById('dayPickerRow').style.display='none';
+  buildStudentChecklist();buildColorGrid();buildSpanBtns(b.period);
+  document.getElementById('modalBg').classList.add('open');
+}
+function closeModal(){document.getElementById('modalBg').classList.remove('open');mCtx=null;}
+function saveBlock(){
+  const name=document.getElementById('fName').value.trim();
+  if(!name){document.getElementById('fName').focus();return;}
+  const sub=document.getElementById('fSub').value.trim();
+  if(mCtx.mode==='add'){
+    const day=mCtx.day||mDay;
+    if(!day){alert('요일을 선택해주세요.');return;}
+    S.blocks.push({id:uid(),day,period:mCtx.period,span:mSpan,name,sub,color:mColor,students:[...mStudents]});
+  } else {
+    const b=S.blocks.find(x=>x.id===mCtx.id);
+    if(b){b.name=name;b.sub=sub;b.span=mSpan;b.color=mColor;b.students=[...mStudents];}
+  }
+  closeModal();render();
+}
+function deleteBlock(){
+  if(!mCtx?.id)return;
+  S.blocks=S.blocks.filter(x=>x.id!==mCtx.id);closeModal();render();
+}
+function removeBlock(id,e){
+  e.stopPropagation();S.blocks=S.blocks.filter(x=>x.id!==id);render();
+}
+
+// ── student checklist (modal) ────────────────────────────────────
+function buildStudentChecklist(){
+  const el=document.getElementById('studentChecklist');el.innerHTML='';
+  if(S.roster.length===0){
+    el.innerHTML='<span class="no-roster-hint">아직 수강생이 없어요. 아래에서 추가하세요.</span>';return;
+  }
+  S.roster.forEach(name=>{
+    const checked=mStudents.includes(name);
+    const item=document.createElement('div');
+    item.className='sc-item'+(checked?' checked':'');
+    item.innerHTML=`<div class="sc-av" style="background:${avColor(name)};color:#fff;">${initials(name)}</div><span>${name}</span><span class="sc-check">✓</span>`;
+    item.onclick=()=>{
+      if(mStudents.includes(name))mStudents=mStudents.filter(s=>s!==name);
+      else mStudents.push(name);
+      buildStudentChecklist();
+    };
+    el.appendChild(item);
+  });
+}
+
+// Add new student from modal (also adds to global roster)
+function addNewStudent(){
+  const input=document.getElementById('fNewStudent');
+  const name=input.value.trim();if(!name)return;
+  if(!S.roster.includes(name))S.roster.push(name);
+  if(!mStudents.includes(name))mStudents.push(name);
+  input.value='';
+  buildStudentChecklist();
+}
+
+// ── roster manager modal ─────────────────────────────────────────
+function openRosterManager(){
+  buildRosterMgrList();document.getElementById('rosterMgrBg').classList.add('open');
+  setTimeout(()=>document.getElementById('fRosterNew').focus(),40);
+}
+function closeRosterMgr(){document.getElementById('rosterMgrBg').classList.remove('open');}
+function buildRosterMgrList(){
+  const el=document.getElementById('rosterMgrList');el.innerHTML='';
+  if(S.roster.length===0){el.innerHTML='<span class="no-roster-hint">등록된 수강생이 없어요.</span>';return;}
+  S.roster.forEach(name=>{
+    const item=document.createElement('div');
+    item.className='sc-item';item.style.cursor='default';
+    item.innerHTML=`<div class="sc-av" style="background:${avColor(name)};color:#fff;">${initials(name)}</div><span style="flex:1">${name}</span><span style="cursor:pointer;opacity:.5;font-size:.65rem" onclick="removeGlobalStudent('${name}')">✕</span>`;
+    el.appendChild(item);
+  });
+}
+function addGlobalStudent(){
+  const input=document.getElementById('fRosterNew');
+  const name=input.value.trim();if(!name)return;
+  if(!S.roster.includes(name)){S.roster.push(name);scheduleSave();}
+  input.value='';buildRosterMgrList();renderStatusPanel();
+}
+function removeGlobalStudent(name){
+  S.roster=S.roster.filter(s=>s!==name);
+  S.blocks.forEach(b=>{b.students=(b.students||[]).filter(s=>s!==name);});
+  buildRosterMgrList();render();
+}
+
+// ── span / color ─────────────────────────────────────────────────
+function buildSpanBtns(startP){
+  const el=document.getElementById('spanBtns');el.innerHTML='';
+  const max=Math.min(4,S.periods-startP+1);
+  for(let s=1;s<=max;s++){
+    const endP=startP+s-1;
+    const btn=document.createElement('button');btn.type='button';
+    btn.className='span-btn'+(s===mSpan?' on':'');
+    btn.innerHTML=s===1?`<strong>${startP}교시</strong><br><span>${pStart(startP)}</span>`:`<strong>${startP}–${endP}교시</strong><br><span>${pStart(startP)}–${pEnd(endP)}</span>`;
+    btn.onclick=()=>{mSpan=s;buildSpanBtns(startP);};el.appendChild(btn);
+  }
+}
+function buildColorGrid(){
+  const el=document.getElementById('colorGrid');el.innerHTML='';
+  COLORS.forEach(c=>{
+    const s=document.createElement('div');s.className='color-swatch'+(c===mColor?' on':'');
+    s.style.background=c;s.onclick=()=>{mColor=c;buildColorGrid();};el.appendChild(s);
+  });
+}
+function buildModalDayPicker(period){
+  const el=document.getElementById('modalDayPicker');el.innerHTML='';
+  S.days.forEach(d=>{
+    const t=document.createElement('div');t.className='day-tag'+(d===mDay?' on':'');
+    t.textContent=d;t.onclick=()=>{mDay=d;buildModalDayPicker(period);};el.appendChild(t);
+  });
+}
+
+// ── cloud sync ───────────────────────────────────────────────────
+const BIN_ID='69ae62cbae596e708f6f4878';
+const BIN_KEY='$2a$10$rRMd6SfI7QACwu6JBVqNsOcF92dT5AZlK6aDFk11fuum8.PmBlvC6';
+const BIN_URL=`https://api.jsonbin.io/v3/b/${BIN_ID}`;
+let saveTimer=null;
+
+async function saveToCloud(){
+  try{await fetch(BIN_URL,{method:'PUT',headers:{'Content-Type':'application/json','X-Access-Key':BIN_KEY},body:JSON.stringify(S)});}
+  catch(e){console.warn('save failed',e);}
+}
+async function loadFromCloud(){
+  showSync('불러오는 중…');
+  try{
+    const res=await fetch(BIN_URL+'/latest',{headers:{'X-Access-Key':BIN_KEY}});
+    const json=await res.json();const data=json.record;
+    if(data&&data.blocks){
+      Object.assign(S,data);
+      if(!S.roster)S.roster=[];
+      document.getElementById('titleInput').value=S.title;
+      document.getElementById('cfgStart').value=S.startTime;
+      document.getElementById('cfgInterval').value=S.interval;
+      document.getElementById('cfgPeriods').value=S.periods;
+    }
+    showSync('✓ 동기화됨',2000);
+  }catch(e){showSync('⚠ 실패',3000);}
+}
+function scheduleSave(){
+  clearTimeout(saveTimer);showSync('저장 중…');
+  saveTimer=setTimeout(async()=>{await saveToCloud();showSync('✓ 저장됨',2000);},800);
+}
+function showSync(msg,clear){
+  const el=document.getElementById('syncStatus');if(el)el.textContent=msg;
+  if(clear)setTimeout(()=>{if(el)el.textContent='';},clear);
+}
+
+// wrap render for auto-save
+const _render=render;
+render=function(){_render();scheduleSave();};
+
+function exportData(){prompt('코드 복사 후 보관:',btoa(unescape(encodeURIComponent(JSON.stringify(S)))));}
+function importPrompt(){
+  const raw=prompt('내보내기 코드를 붙여넣으세요:');if(!raw)return;
+  try{
+    const p=JSON.parse(decodeURIComponent(escape(atob(raw.trim()))));
+    Object.assign(S,p);if(!S.roster)S.roster=[];
+    document.getElementById('titleInput').value=S.title;
+    document.getElementById('cfgStart').value=S.startTime;
+    document.getElementById('cfgInterval').value=S.interval;
+    document.getElementById('cfgPeriods').value=S.periods;
+    buildDayToggles();render();
+  }catch{alert('올바르지 않은 코드예요.');}
+}
+function toggleManage(){document.getElementById('managePanel').classList.toggle('open');}
+
+// ── event listeners ───────────────────────────────────────────────
+document.getElementById('titleInput').addEventListener('input',e=>{S.title=e.target.value;scheduleSave();});
+document.getElementById('modalBg').addEventListener('click',function(e){if(e.target===this)closeModal();});
+document.getElementById('rosterMgrBg').addEventListener('click',function(e){if(e.target===this)closeRosterMgr();});
+document.getElementById('fRosterNew').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();addGlobalStudent();}});
+document.getElementById('fNewStudent').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();addNewStudent();}});
+document.addEventListener('click',e=>{
+  const p=document.getElementById('rosterPopup');
+  if(p.classList.contains('open')&&!p.contains(e.target))closeRoster();
+});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal();closeRoster();closeRosterMgr();}});
+
+// ── init ─────────────────────────────────────────────────────────
+buildDayToggles();
+loadFromCloud().then(()=>{buildDayToggles();_render();});
+setInterval(updateNowLine,30000);
+</script>
+</body>
+</html>
