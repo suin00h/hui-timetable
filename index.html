@@ -162,9 +162,13 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
 .span-btn:hover{border-color:var(--accent);color:var(--accent);}
 .span-btn.on{background:var(--accent);border-color:var(--accent);color:#fff;}
 .color-grid{display:grid;grid-template-columns:repeat(8,26px);gap:5px;}
-.color-swatch{width:26px;height:26px;border-radius:5px;cursor:pointer;border:2px solid transparent;transition:transform .12s,border-color .12s;}
+.color-swatch{width:26px;height:26px;border-radius:5px;cursor:pointer;border:2px solid transparent;transition:transform .12s,border-color .12s;position:relative;}
 .color-swatch:hover{transform:scale(1.14);}
 .color-swatch.on{border-color:#fff;}
+.color-swatch.editable::after{content:'✎';position:absolute;bottom:-1px;right:-1px;font-size:7px;background:rgba(0,0,0,.55);color:#fff;border-radius:2px;padding:0 2px;opacity:0;transition:opacity .1s;pointer-events:none;}
+.color-swatch.editable:hover::after{opacity:1;}
+/* hidden color picker anchor */
+#palettePickerInput{position:absolute;width:0;height:0;opacity:0;pointer-events:none;}
 
 /* Student picker in modal */
 .student-section{display:flex;flex-direction:column;gap:8px;}
@@ -215,8 +219,10 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
     <label>고정 일정</label>
     <button class="btn" type="button" onclick="openFixedEventMgr()" style="font-size:.72rem;padding:5px 10px;">📌 관리</button>
   </div>
-  <p class="tip">💡 빈 칸 클릭 → 수업 추가 &nbsp;|&nbsp; 왼쪽 교시 라벨 클릭 → 요일 선택 추가 &nbsp;|&nbsp; 블록 클릭 → 편집</p>
+  <p class="tip">💡 빈 칸 클릭 → 수업 추가 &nbsp;|&nbsp; 왼쪽 교시 라벨 클릭 → 요일 선택 추가 &nbsp;|&nbsp; 블록 클릭 → 편집<br>🎨 색상 팔레트: 색상 선택 시 <strong>우클릭</strong>으로 팔레트 색상 편집 가능</p>
 </div>
+
+<input type="color" id="palettePickerInput">
 
 <div class="tt-wrap"><div class="tt-outer" id="ttOuter"></div></div>
 
@@ -301,17 +307,19 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
   <div class="modal" style="width:480px;">
     <h3>수강생 전체 관리</h3>
 
-    <!-- add new -->
+    <!-- add / edit -->
     <div class="form-row">
-      <label>새 인원 추가</label>
+      <label id="rosterFormLabel">새 인원 추가</label>
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
         <input type="text" id="fRosterNew" placeholder="이름" style="flex:1;min-width:80px;">
         <label style="display:flex;align-items:center;gap:5px;font-size:.76rem;color:var(--text);cursor:pointer;">
           <input type="checkbox" id="fRosterIsIntern" style="width:auto;"> 인턴
         </label>
-        <input type="color" id="fRosterColor" value="#ff9f43" title="인턴 색상" style="width:32px;height:32px;border:none;background:none;cursor:pointer;padding:0;">
-        <button class="btn" type="button" onclick="addGlobalStudent()">+ 추가</button>
+        <button class="btn danger" id="rosterEditDelBtn" type="button" onclick="deleteEditingRoster()" style="display:none;">삭제</button>
+        <button class="btn" id="rosterCancelBtn" type="button" onclick="resetRosterForm()" style="display:none;">취소</button>
+        <button class="btn primary" id="rosterSaveBtn" type="button" onclick="saveRosterEntry()">+ 추가</button>
       </div>
+      <div class="color-grid" id="rosterColorGrid" style="margin-top:8px;"></div>
     </div>
 
     <!-- intern schedule builder (shown when intern checkbox checked) -->
@@ -320,9 +328,9 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
       <div id="internSchedList" style="display:flex;flex-direction:column;gap:5px;margin-bottom:6px;"></div>
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
         <div class="day-toggles" id="internDayPicker"></div>
-        <input type="time" id="fInternStart" value="09:00" style="width:90px;">
+        <input type="time" id="fInternStart" value="09:00" style="width:130px;min-width:130px;">
         <span style="color:var(--muted);font-size:.8rem">~</span>
-        <input type="time" id="fInternEnd" value="13:00" style="width:90px;">
+        <input type="time" id="fInternEnd" value="13:00" style="width:130px;min-width:130px;">
         <button class="btn" type="button" onclick="addInternSched()">+ 추가</button>
       </div>
     </div>
@@ -339,7 +347,9 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
 
 <script>
 const DAYS_ALL=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-const COLORS=['#5b6af0','#7c3aed','#db2777','#e05c5c','#ea7a2c','#d4a017','#16a34a','#0891b2','#0d7490','#6b7280','#a16207','#7f5539','#b5179e','#3a86ff','#48cae4','#80b918'];
+let COLORS=['#5b6af0','#7c3aed','#db2777','#e05c5c','#ea7a2c','#d4a017','#16a34a','#0891b2',
+            '#0d7490','#6b7280','#a16207','#7f5539','#b5179e','#3a86ff','#48cae4','#80b918',
+            '#f72585','#4cc9f0','#43aa8b','#f8961e','#277da1','#c77dff','#90be6d','#e63946'];
 const AV_COLORS=['#5b6af0','#16a34a','#db2777','#ea7a2c','#0891b2','#7c3aed','#d4a017','#e05c5c'];
 
 let S={
@@ -349,6 +359,7 @@ let S={
   roster:[],   // {name,intern,color,schedule:[{day,start,end}]}
   fixedEvents:[], // {id,days:[],startTime,endTime,name,color}
   subLines:false, // 30min sub-interval dotted lines
+  palette:null,   // custom color palette (16 hex strings), null = use default
 };
 
 // roster migration: old format was string[], new is object[]
@@ -376,7 +387,12 @@ function syncState(){
   S.subLines=document.getElementById('cfgSubLines').checked;
 }
 function initials(n){return n.trim().slice(0,2).toUpperCase();}
-function avColor(n){let h=0;for(let c of n)h=(h+c.charCodeAt(0))%AV_COLORS.length;return AV_COLORS[h];}
+function avColor(n){
+  const r=S.roster.find(x=>x.name===n);
+  if(r&&r.color&&!r.intern)return r.color; // use custom color for non-interns too
+  if(r&&r.intern)return r.color;
+  let h=0;for(let c of n)h=(h+c.charCodeAt(0))%AV_COLORS.length;return AV_COLORS[h];
+}
 
 // ── current class detection ───────────────────────────────────────
 function getCurrentBlocks(){
@@ -832,22 +848,108 @@ function addNewStudent(){
 }
 
 // ── roster manager modal ─────────────────────────────────────────
-let newInternScheds=[]; // temp schedule while adding new intern
+let newInternScheds=[];
 let internDaySelected='Mon';
+let rosterEditName=null;
+let rosterColor=COLORS[4]; // default orange-ish
+let rosterInternExpanded=new Set(); // track which intern rows are expanded
 
 function openRosterManager(){
-  newInternScheds=[];internDaySelected=S.days[0]||'Mon';
+  resetRosterForm();
   buildRosterMgrList();
   buildInternDayPicker();
   renderInternSchedList();
   document.getElementById('rosterMgrBg').classList.add('open');
   setTimeout(()=>document.getElementById('fRosterNew').focus(),40);
-  // sync intern checkbox listener
   document.getElementById('fRosterIsIntern').onchange=function(){
     document.getElementById('internSchedSection').style.display=this.checked?'block':'none';
   };
 }
 function closeRosterMgr(){document.getElementById('rosterMgrBg').classList.remove('open');}
+
+function buildRosterColorGrid(){
+  const el=document.getElementById('rosterColorGrid');el.innerHTML='';
+  COLORS.forEach(c=>{
+    const s=document.createElement('div');
+    s.className='color-swatch'+(c===rosterColor?' on':'');
+    s.style.background=c;
+    s.onclick=()=>{rosterColor=c;buildRosterColorGrid();};
+    el.appendChild(s);
+  });
+}
+
+function resetRosterForm(){
+  rosterEditName=null;
+  rosterColor=COLORS[4];
+  newInternScheds=[];
+  internDaySelected=S.days[0]||'Mon';
+  document.getElementById('fRosterNew').value='';
+  document.getElementById('fRosterNew').removeAttribute('readonly');
+  document.getElementById('fRosterNew').oninput=function(){
+    if(!rosterEditName){
+      // preview the hash color as default while typing
+      let h=0;for(let c of this.value)h=(h+c.charCodeAt(0))%AV_COLORS.length;
+      if(this.value)rosterColor=AV_COLORS[h];
+      else rosterColor=COLORS[4];
+      buildRosterColorGrid();
+    }
+  };
+  document.getElementById('fRosterIsIntern').checked=false;
+  document.getElementById('internSchedSection').style.display='none';
+  document.getElementById('rosterFormLabel').textContent='새 인원 추가';
+  document.getElementById('rosterSaveBtn').textContent='+ 추가';
+  document.getElementById('rosterEditDelBtn').style.display='none';
+  document.getElementById('rosterCancelBtn').style.display='none';
+  buildInternDayPicker();
+  renderInternSchedList();
+  buildRosterColorGrid();
+  buildRosterMgrList();
+}
+
+function loadRosterToForm(r){
+  rosterEditName=r.name;
+  rosterColor=r.color||COLORS[4];
+  newInternScheds=r.intern?[...(r.schedule||[])]:[];
+  internDaySelected=S.days[0]||'Mon';
+  document.getElementById('fRosterNew').value=r.name;
+  document.getElementById('fRosterNew').setAttribute('readonly','true');
+  document.getElementById('fRosterIsIntern').checked=!!r.intern;
+  document.getElementById('internSchedSection').style.display=r.intern?'block':'none';
+  document.getElementById('rosterFormLabel').textContent='인원 수정';
+  document.getElementById('rosterSaveBtn').textContent='저장';
+  document.getElementById('rosterEditDelBtn').style.display='inline-flex';
+  document.getElementById('rosterCancelBtn').style.display='inline-flex';
+  buildInternDayPicker();
+  renderInternSchedList();
+  buildRosterColorGrid();
+  buildRosterMgrList();
+  document.getElementById('fRosterNew').scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+function saveRosterEntry(){
+  const name=document.getElementById('fRosterNew').value.trim();
+  if(!name)return;
+  const isInternCheck=document.getElementById('fRosterIsIntern').checked;
+  if(rosterEditName){
+    const r=S.roster.find(x=>x.name===rosterEditName);
+    if(r){
+      r.intern=isInternCheck;
+      r.color=rosterColor;
+      r.schedule=isInternCheck?[...newInternScheds]:[];
+    }
+  } else {
+    if(S.roster.find(r=>r.name===name)){alert('이미 등록된 이름이에요.');return;}
+    S.roster.push({name,intern:isInternCheck,color:rosterColor,schedule:isInternCheck?[...newInternScheds]:[]});
+  }
+  scheduleSave();resetRosterForm();render();
+}
+
+function deleteEditingRoster(){
+  if(!rosterEditName)return;
+  S.roster=S.roster.filter(r=>r.name!==rosterEditName);
+  S.blocks.forEach(b=>{b.students=(b.students||[]).filter(s=>s!==rosterEditName);});
+  scheduleSave();resetRosterForm();render();
+}
 
 function buildInternDayPicker(){
   const el=document.getElementById('internDayPicker');el.innerHTML='';
@@ -883,36 +985,59 @@ function buildRosterMgrList(){
   const el=document.getElementById('rosterMgrList');el.innerHTML='';
   if(S.roster.length===0){el.innerHTML='<span class="no-roster-hint">등록된 인원이 없어요.</span>';return;}
   S.roster.forEach(r=>{
+    const isEditing=rosterEditName===r.name;
+    const isExpanded=rosterInternExpanded.has(r.name);
     const item=document.createElement('div');
-    item.className='sc-item';item.style.cssText='cursor:default;display:flex;align-items:center;gap:6px;';
-    const av=r.intern
-      ? `<div class="sc-av" style="background:${r.color};color:#fff;border-radius:4px;">${initials(r.name)}</div>`
-      : `<div class="sc-av" style="background:${avColor(r.name)};color:#fff;">${initials(r.name)}</div>`;
-    const badge=r.intern?`<span style="font-size:.6rem;padding:1px 5px;border-radius:8px;background:${r.color}33;color:${r.color};border:1px solid ${r.color}55;">인턴</span>`:'';
-    const schedStr=r.intern&&r.schedule?.length>0
-      ? `<span style="font-size:.6rem;color:var(--muted);margin-left:2px;">${r.schedule.map(s=>`${s.day} ${s.start}–${s.end}`).join(' / ')}</span>`:'';
-    item.innerHTML=`${av}<span style="flex:1">${r.name}</span>${badge}${schedStr}
-      <span style="cursor:pointer;opacity:.5;font-size:.65rem;margin-left:4px;" onclick="removeGlobalStudent('${r.name}')">✕</span>`;
+    item.style.cssText=`border-radius:10px;border:1px solid ${isEditing?'var(--accent)':'var(--border)'};background:${isEditing?'var(--accent-dim)':'var(--surface)'};margin-bottom:4px;overflow:hidden;transition:all .12s;`;
+
+    const colorDot=r.intern
+      ? `<div style="width:10px;height:10px;border-radius:50%;background:${r.color};flex-shrink:0;"></div>`
+      : `<div style="width:10px;height:10px;border-radius:50%;background:${avColor(r.name)};flex-shrink:0;"></div>`;
+    const nameText=`<span style="font-size:.76rem;font-weight:600;" title="${r.name}">${initials(r.name)}</span>`;
+    const spacer='<span style="flex:1;"></span>';
+    const badge=r.intern?`<span style="font-size:.6rem;padding:1px 5px;border-radius:8px;background:${r.color}33;color:${r.color};border:1px solid ${r.color}55;flex-shrink:0;">인턴</span>`:'';
+
+    // intern toggle arrow
+    const schedCount=r.intern&&r.schedule?.length>0?r.schedule.length:0;
+    const toggleBtn=schedCount>0
+      ? `<span style="font-size:.62rem;color:var(--muted);cursor:pointer;padding:2px 6px;border-radius:4px;border:1px solid var(--border);flex-shrink:0;" onclick="toggleInternSched('${r.name}',event)">${isExpanded?'▲ 접기':`▼ ${schedCount}개 일정`}</span>`
+      : '';
+    const editBtn=`<span style="font-size:.62rem;opacity:.45;padding:2px 6px;border-radius:4px;border:1px solid var(--border);flex-shrink:0;">편집</span>`;
+
+    const header=document.createElement('div');
+    header.style.cssText='display:flex;align-items:center;gap:6px;padding:7px 10px;cursor:pointer;';
+    header.innerHTML=`${colorDot}${nameText}${badge}${toggleBtn}${spacer}${editBtn}`;
+    header.onclick=(e)=>{
+      if(e.target.closest('[onclick*="toggleInternSched"]'))return;
+      loadRosterToForm(r);
+    };
+    item.appendChild(header);
+
+    // expanded schedule rows
+    if(r.intern && isExpanded && r.schedule?.length>0){
+      const schedWrap=document.createElement('div');
+      schedWrap.style.cssText='padding:0 10px 8px 44px;display:flex;flex-direction:column;gap:3px;';
+      r.schedule.forEach(sc=>{
+        const row=document.createElement('div');
+        row.style.cssText='font-size:.68rem;color:var(--muted);display:flex;gap:6px;';
+        row.innerHTML=`<span style="background:var(--accent-dim);border:1px solid var(--border);padding:1px 7px;border-radius:10px;">${sc.day} ${sc.start}–${sc.end}</span>`;
+        schedWrap.appendChild(row);
+      });
+      item.appendChild(schedWrap);
+    }
     el.appendChild(item);
   });
 }
 
-function addGlobalStudent(){
-  const input=document.getElementById('fRosterNew');
-  const name=input.value.trim();if(!name)return;
-  const isInternCheck=document.getElementById('fRosterIsIntern').checked;
-  const color=document.getElementById('fRosterColor').value;
-  if(S.roster.find(r=>r.name===name)){alert('이미 등록된 이름이에요.');return;}
-  const entry={name,intern:isInternCheck,color,schedule:isInternCheck?[...newInternScheds]:[]};
-  S.roster.push(entry);
-  // reset form
-  input.value='';
-  document.getElementById('fRosterIsIntern').checked=false;
-  document.getElementById('internSchedSection').style.display='none';
-  newInternScheds=[];renderInternSchedList();
-  scheduleSave();buildRosterMgrList();render();
+function toggleInternSched(name,e){
+  e.stopPropagation();
+  if(rosterInternExpanded.has(name))rosterInternExpanded.delete(name);
+  else rosterInternExpanded.add(name);
+  buildRosterMgrList();
 }
 
+// kept for backward compat
+function addGlobalStudent(){saveRosterEntry();}
 function removeGlobalStudent(name){
   S.roster=S.roster.filter(r=>r.name!==name);
   S.blocks.forEach(b=>{b.students=(b.students||[]).filter(s=>s!==name);});
@@ -930,13 +1055,6 @@ function buildSpanBtns(startP){
     btn.innerHTML=s===1?`<strong>${startP}교시</strong><br><span>${pStart(startP)}</span>`:`<strong>${startP}–${endP}교시</strong><br><span>${pStart(startP)}–${pEnd(endP)}</span>`;
     btn.onclick=()=>{mSpan=s;buildSpanBtns(startP);};el.appendChild(btn);
   }
-}
-function buildColorGrid(){
-  const el=document.getElementById('colorGrid');el.innerHTML='';
-  COLORS.forEach(c=>{
-    const s=document.createElement('div');s.className='color-swatch'+(c===mColor?' on':'');
-    s.style.background=c;s.onclick=()=>{mColor=c;buildColorGrid();};el.appendChild(s);
-  });
 }
 function buildModalDayPicker(period){
   const el=document.getElementById('modalDayPicker');el.innerHTML='';
@@ -965,6 +1083,7 @@ async function loadFromCloud(){
       Object.assign(S,data);
       if(!S.roster)S.roster=[];
       if(!S.fixedEvents)S.fixedEvents=[];
+      if(S.palette&&S.palette.length===24)COLORS=[...S.palette];
       migrateRoster();
       document.getElementById('titleInput').value=S.title;
       document.getElementById('cfgStart').value=S.startTime;
@@ -1054,15 +1173,54 @@ function buildFixedDayPicker(){
   });
 }
 
-function buildFixedColorGrid(){
-  const el=document.getElementById('fixedColorGrid');el.innerHTML='';
-  COLORS.forEach(c=>{
+// ── palette editor ────────────────────────────────────────────────
+let _paletteEditIdx=null;
+function editPaletteColor(idx,currentColor,cb){
+  const inp=document.getElementById('palettePickerInput');
+  inp.value=currentColor;
+  _paletteEditIdx=idx;
+  inp.oninput=null;
+  inp.onchange=function(){
+    COLORS[idx]=this.value;
+    S.palette=[...COLORS];
+    if(cb)cb();
+    scheduleSave();
+  };
+  inp.click();
+}
+
+function makeSwatches(el,selectedColor,onSelect,editable=false){
+  el.innerHTML='';
+  COLORS.forEach((c,idx)=>{
     const s=document.createElement('div');
-    s.className='color-swatch'+(c===fixedColor?' on':'');
+    s.className='color-swatch'+(c===selectedColor?' on':'')+(editable?' editable':'');
     s.style.background=c;
-    s.onclick=()=>{fixedColor=c;buildFixedColorGrid();};
+    s.onclick=()=>{onSelect(c);};
+    if(editable){
+      s.oncontextmenu=(e)=>{
+        e.preventDefault();
+        editPaletteColor(idx,c,()=>{
+          // rebuild whichever grid was right-clicked
+          s.style.background=COLORS[idx];
+          el.querySelectorAll('.color-swatch').forEach((sw,i)=>sw.style.background=COLORS[i]);
+        });
+      };
+    }
     el.appendChild(s);
   });
+}
+
+function buildColorGrid(){
+  const el=document.getElementById('colorGrid');
+  makeSwatches(el,mColor,c=>{mColor=c;buildColorGrid();},true);
+}
+function buildRosterColorGrid(){
+  const el=document.getElementById('rosterColorGrid');
+  makeSwatches(el,rosterColor,c=>{rosterColor=c;buildRosterColorGrid();},true);
+}
+function buildFixedColorGrid(){
+  const el=document.getElementById('fixedColorGrid');
+  makeSwatches(el,fixedColor,c=>{fixedColor=c;buildFixedColorGrid();},true);
 }
 
 function buildFixedEventList(){
