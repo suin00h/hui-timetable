@@ -30,7 +30,6 @@ export default async function handler(req, res) {
     return json.length > 0;
   }
 
-  // GET: 데이터 읽기 (pwHash 제외)
   if (req.method === 'GET') {
     const r = await fetch(`${base}/timetable?id=eq.main&select=data`, { headers: dbHeaders });
     const json = await r.json();
