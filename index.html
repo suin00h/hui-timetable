@@ -1121,11 +1121,16 @@ function buildModalDayPicker(period){
 
 // ── cloud sync ───────────────────────────────────────────────────
 const API_URL='https://hui-timetable.vercel.app/api/data';
-const WRITE_TOKEN='huilab2026secret';
 let saveTimer=null;
 
+function getSessionToken(){
+  try{return sessionStorage.getItem('tt_session');}catch(e){return null;}
+}
+
 async function saveToCloud(){
-  try{await fetch(API_URL,{method:'PUT',headers:{'Content-Type':'application/json','x-write-token':WRITE_TOKEN},body:JSON.stringify(S)});}
+  const token=getSessionToken();
+  if(!token)return;
+  try{await fetch(API_URL,{method:'PUT',headers:{'Content-Type':'application/json','x-session-token':token},body:JSON.stringify(S)});}
   catch(e){console.warn('save failed',e);}
 }
 async function loadFromCloud(){
@@ -1346,7 +1351,7 @@ function applyLockState(){
 
 function handleLockClick(){
   if(isUnlocked()){
-    try{sessionStorage.removeItem('tt_auth');}catch(e){}
+    try{sessionStorage.removeItem('tt_auth');sessionStorage.removeItem('tt_session');}catch(e){}
     applyLockState();
   } else {
     openAuthOverlay();
@@ -1371,7 +1376,7 @@ async function submitAuth(){
     const res=await fetch(API_URL+'?action=verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({hash})});
     const json=await res.json();
     if(json.ok){
-      try{sessionStorage.setItem('tt_auth','1');}catch(e){}
+      try{sessionStorage.setItem('tt_auth','1');sessionStorage.setItem('tt_session',json.token);}catch(e){}
       closeAuthOverlay();
       applyLockState();
     } else {
@@ -1403,7 +1408,7 @@ async function changePassword(){
   try{
     const res=await fetch(API_URL+'?action=changepw',{
       method:'POST',
-      headers:{'Content-Type':'application/json','x-write-token':WRITE_TOKEN},
+      headers:{'Content-Type':'application/json','x-session-token':getSessionToken()},
       body:JSON.stringify({currentHash,newHash})
     });
     const json=await res.json();
