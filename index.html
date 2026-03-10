@@ -1121,10 +1121,11 @@ function buildModalDayPicker(period){
 
 // ── cloud sync ───────────────────────────────────────────────────
 const API_URL='https://hui-timetable.vercel.app/api/data';
+const WRITE_TOKEN='huilab2026secret';
 let saveTimer=null;
 
 async function saveToCloud(){
-  try{await fetch(API_URL,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(S)});}
+  try{await fetch(API_URL,{method:'PUT',headers:{'Content-Type':'application/json','x-write-token':WRITE_TOKEN},body:JSON.stringify(S)});}
   catch(e){console.warn('save failed',e);}
 }
 async function loadFromCloud(){
@@ -1327,18 +1328,9 @@ function removeFixedEvent(id,e){
 }
 
 // ── auth ──────────────────────────────────────────────────────────
-const PW_HASH='6196735bccfab99b6ce6eaf4e375160b39926de2fcfcf1121c97a29ae3166fca'; // default: lab2026!
-// To change password: open browser console and run setPwHash('newpassword')
-
 async function sha256(str){
   const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(str));
   return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
-}
-
-function getStoredHash(){
-  // Priority: S.pwHash (cloud-saved) > sessionStorage override > hardcoded default
-  if(S.pwHash)return S.pwHash;
-  try{return sessionStorage.getItem('tt_pw_hash')||PW_HASH;}catch(e){return PW_HASH;}
 }
 
 function isUnlocked(){
@@ -1354,7 +1346,6 @@ function applyLockState(){
 
 function handleLockClick(){
   if(isUnlocked()){
-    // lock
     try{sessionStorage.removeItem('tt_auth');}catch(e){}
     applyLockState();
   } else {
@@ -1375,27 +1366,26 @@ function closeAuthOverlay(){
 async function submitAuth(){
   const val=document.getElementById('authInput').value;
   const hash=await sha256(val);
-  const stored=getStoredHash();
-  if(hash===stored){
-    try{sessionStorage.setItem('tt_auth','1');}catch(e){}
-    closeAuthOverlay();
-    applyLockState();
-  } else {
+  // 서버에서 검증
+  try{
+    const res=await fetch(API_URL+'?action=verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({hash})});
+    const json=await res.json();
+    if(json.ok){
+      try{sessionStorage.setItem('tt_auth','1');}catch(e){}
+      closeAuthOverlay();
+      applyLockState();
+    } else {
+      const inp=document.getElementById('authInput');
+      inp.classList.add('error');inp.value='';
+      setTimeout(()=>inp.classList.remove('error'),400);
+      inp.focus();
+    }
+  }catch(e){
     const inp=document.getElementById('authInput');
-    inp.classList.add('error');
-    inp.value='';
+    inp.classList.add('error');inp.value='';
     setTimeout(()=>inp.classList.remove('error'),400);
-    inp.focus();
   }
 }
-
-// console helper to change password
-window.setPwHash=async function(newPw){
-  const h=await sha256(newPw);
-  try{sessionStorage.setItem('tt_pw_hash',h);}catch(e){}
-  console.log('새 비밀번호 해시:', h);
-  console.log('이 값을 코드의 PW_HASH 상수에 붙여넣으면 영구 변경됩니다.');
-};
 
 async function changePassword(){
   const cur=document.getElementById('cfgPwCurrent').value;
@@ -1408,20 +1398,24 @@ async function changePassword(){
   if(nw!==cf){setMsg('새 비밀번호가 일치하지 않아요.');return;}
   if(nw.length<4){setMsg('4자 이상으로 설정해주세요.');return;}
 
-  const curHash=await sha256(cur);
-  const stored=getStoredHash();
-  if(curHash!==stored){setMsg('현재 비밀번호가 틀렸어요.');return;}
-
+  const currentHash=await sha256(cur);
   const newHash=await sha256(nw);
-  // Save to S so it persists via JSONBin
-  S.pwHash=newHash;
-  scheduleSave();
-  // Also update session
-  try{sessionStorage.setItem('tt_pw_hash',newHash);}catch(e){}
-  document.getElementById('cfgPwCurrent').value='';
-  document.getElementById('cfgPwNew').value='';
-  document.getElementById('cfgPwConfirm').value='';
-  setMsg('✓ 비밀번호가 변경됐어요.',true);
+  try{
+    const res=await fetch(API_URL+'?action=changepw',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-write-token':WRITE_TOKEN},
+      body:JSON.stringify({currentHash,newHash})
+    });
+    const json=await res.json();
+    if(json.ok){
+      document.getElementById('cfgPwCurrent').value='';
+      document.getElementById('cfgPwNew').value='';
+      document.getElementById('cfgPwConfirm').value='';
+      setMsg('✓ 비밀번호가 변경됐어요.',true);
+    } else {
+      setMsg('현재 비밀번호가 틀렸어요.');
+    }
+  }catch(e){setMsg('서버 오류가 발생했어요.');}
 }
 
 // ── theme ─────────────────────────────────────────────────────────
