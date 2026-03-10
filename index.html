@@ -1120,20 +1120,18 @@ function buildModalDayPicker(period){
 }
 
 // ── cloud sync ───────────────────────────────────────────────────
-const BIN_ID='69ae62cbae596e708f6f4878';
-const BIN_KEY='$2a$10$rRMd6SfI7QACwu6JBVqNsOcF92dT5AZlK6aDFk11fuum8.PmBlvC6';
-const BIN_URL=`https://api.jsonbin.io/v3/b/${BIN_ID}`;
+const API_URL='https://hui-timetable.vercel.app/api/data';
 let saveTimer=null;
 
 async function saveToCloud(){
-  try{await fetch(BIN_URL,{method:'PUT',headers:{'Content-Type':'application/json','X-Access-Key':BIN_KEY},body:JSON.stringify(S)});}
+  try{await fetch(API_URL,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(S)});}
   catch(e){console.warn('save failed',e);}
 }
 async function loadFromCloud(){
   showSync('불러오는 중…');
   try{
-    const res=await fetch(BIN_URL+'/latest',{headers:{'X-Access-Key':BIN_KEY}});
-    const json=await res.json();const data=json.record;
+    const res=await fetch(API_URL);
+    const data=await res.json();
     if(data&&data.blocks){
       Object.assign(S,data);
       if(!S.roster)S.roster=[];
